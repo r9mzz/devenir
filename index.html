@@ -2,6 +2,10 @@
 <title>Devenir</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex">
+<meta name="theme-color" content="#131316">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <style>
 /* Direction artistique : nuit profonde, verre dépoli, halos diffus.
    Thème unique assumé — l'objet est nocturne, il ne s'inverse pas. */
@@ -326,6 +330,7 @@ nav button.on .i{opacity:1;filter:drop-shadow(0 0 7px rgba(255,255,255,.55))}
       <div class="field"><label>Jusqu’à</label><div class="stepper" data-s="end"><button type="button" aria-label="Plus tôt">−</button><span></span><button type="button" aria-label="Plus tard">+</button></div></div>
     </div>
     <button class="ghost" id="notifBtn">Activer les notifications</button>
+    <button class="ghost" id="notifTest">Envoyer une notification de test</button>
     <p class="hint" id="notifHint">Les rappels se déclenchent quand cette page est ouverte (onglet ou icône sur l’écran d’accueil). Une page web ne peut pas réveiller un téléphone fermé : pour un rappel qui sonne même écran verrouillé, ajoute en plus une alarme répétée dans l’app Horloge, à la même fréquence.</p>
   </div>
   <div style="display:flex;flex-direction:column;gap:14px">
@@ -523,15 +528,30 @@ document.addEventListener('click',e=>{
   if(!pausePop.hidden&&!pausePop.contains(e.target))pausePop.hidden=true;
 });
 function notifGranted(){return typeof Notification!=='undefined'&&Notification.permission==='granted';}
-function fireReminder(){
-  let shown=false;
-  if(notifGranted()){
-    try{
-      const n=new Notification('Devenir',{body:sheetTitle().replace(/ /g,' '),tag:'devenir'});
-      n.onclick=()=>{try{window.focus();}catch(e){} show('today');openSheet();};
-      shown=true;
-    }catch(e){}
+/* Sur Android, new Notification() est interdit aux pages web : il faut passer
+   par le service worker (registration.showNotification). */
+let swReg=null;
+if('serviceWorker' in navigator){
+  try{
+    navigator.serviceWorker.register('sw.js').then(r=>{swReg=r;}).catch(()=>{});
+    navigator.serviceWorker.addEventListener('message',e=>{
+      if(e.data&&e.data.open==='checkin'){show('today');openSheet();}
+    });
+  }catch(e){}
+}
+function showNotif(body){
+  if(!notifGranted())return false;
+  if(swReg&&swReg.showNotification){
+    try{swReg.showNotification('Devenir',{body:body,tag:'devenir',icon:'icon-192.png',badge:'icon-192.png'});return true;}catch(e){}
   }
+  try{
+    const n=new Notification('Devenir',{body:body,tag:'devenir',icon:'icon-192.png'});
+    n.onclick=()=>{try{window.focus();}catch(e){} show('today');openSheet();};
+    return true;
+  }catch(e){return false;}
+}
+function fireReminder(){
+  const shown=showNotif(sheetTitle());
   try{navigator.vibrate&&navigator.vibrate([200,100,200]);}catch(e){}
   if(!shown&&!sheet.classList.contains('open')){show('today');openSheet();}
 }
@@ -789,6 +809,18 @@ function refreshNotifUI(){
 notifBtn.addEventListener('click',()=>{
   try{ Notification.requestPermission().then(refreshNotifUI).catch(refreshNotifUI); }
   catch(e){ refreshNotifUI(); }
+});
+document.getElementById('notifTest').addEventListener('click',()=>{
+  const go=()=>{
+    if(showNotif('Ceci est un test — les notifications fonctionnent.')){
+      notifHint.textContent='Notification de test envoyée ✓ — si elle n’apparaît pas, vérifie que Chrome a le droit d’afficher des notifications (Paramètres Android → Applications → Chrome → Notifications).';
+    }else{
+      notifHint.textContent='Impossible d’envoyer la notification : autorise-les d’abord avec le bouton ci-dessus, puis réessaie.';
+    }
+  };
+  if(typeof Notification!=='undefined'&&Notification.permission==='default'&&Notification.requestPermission){
+    Notification.requestPermission().then(()=>{refreshNotifUI();go();}).catch(go);
+  }else go();
 });
 refreshNotifUI();
 
