@@ -551,6 +551,12 @@ function showNotif(body){
   }catch(e){return false;}
 }
 function fireReminder(){
+  /* Page visible : la question s'ouvre directement, pas de notification. */
+  if(document.visibilityState==='visible'){
+    try{navigator.vibrate&&navigator.vibrate(80);}catch(e){}
+    if(!sheet.classList.contains('open')){show('today');openSheet();}
+    return;
+  }
   const shown=showNotif(sheetTitle());
   try{navigator.vibrate&&navigator.vibrate([200,100,200]);}catch(e){}
   if(!shown&&!sheet.classList.contains('open')){show('today');openSheet();}
@@ -567,6 +573,11 @@ function checkReminder(){
   fireReminder();
 }
 setInterval(checkReminder,30000);
+/* Android gèle les minuteurs écran éteint : rattrapage dès le retour sur la
+   page — un rappel dû pendant le gel s'ouvre immédiatement. */
+['visibilitychange','focus','pageshow'].forEach(ev=>addEventListener(ev,()=>{
+  if(document.visibilityState==='visible') checkReminder();
+}));
 
 /* ---------- aujourd'hui ---------- */
 const fmtLong=new Intl.DateTimeFormat('fr-FR',{weekday:'long',day:'numeric',month:'long'});
