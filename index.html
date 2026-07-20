@@ -123,7 +123,7 @@ h2{font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:var(--fain
   background:rgba(28,28,32,.82);
   border:.5px solid var(--stroke2);
   border-radius:28px;
-  backdrop-filter:blur(34px) saturate(160%);-webkit-backdrop-filter:blur(34px) saturate(160%);
+  backdrop-filter:blur(20px) saturate(150%);-webkit-backdrop-filter:blur(20px) saturate(150%);
   padding:14px 20px calc(20px + env(safe-area-inset-bottom));
   transform:translateY(115%);transition:transform .38s cubic-bezier(.25,.9,.25,1.02);
   max-width:440px;margin:0 auto;display:flex;flex-direction:column;gap:16px;
@@ -138,7 +138,6 @@ h2{font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:var(--fain
   font-family:inherit;font-size:14.5px;color:var(--ink);
   background:var(--glass2);border:.5px solid var(--stroke2);border-radius:999px;
   padding:10px 16px;cursor:pointer;
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
 }
 .bubble .dot{width:8px;height:8px}
 .bubble.sel{
@@ -226,8 +225,7 @@ input[type=range]::-moz-range-thumb{
 .insight{font-size:12.5px;color:var(--faint);text-align:center;line-height:1.5;margin:auto 0 0;padding-top:20px;letter-spacing:.01em}
 .daydetail{
   border-radius:22px;padding:22px;display:flex;flex-direction:column;gap:16px;
-  background:var(--glass);border:.5px solid var(--stroke);
-  backdrop-filter:blur(26px);-webkit-backdrop-filter:blur(26px);
+  background:rgba(255,255,255,.045);border:.5px solid var(--stroke);
 }
 .back{background:none;border:none;color:var(--muted);font-size:14px;font-family:inherit;cursor:pointer;padding:0;text-align:left}
 .quote{font-size:18px;font-weight:300;line-height:1.5;font-style:italic;letter-spacing:-.01em}
@@ -275,7 +273,7 @@ nav button.on .i{opacity:1;filter:drop-shadow(0 0 7px rgba(255,255,255,.55))}
     <div class="pausechip" id="pauseChip" hidden></div>
   </header>
   <div class="warn" id="storageWarn" hidden>Ce navigateur bloque le stockage local ici : tes saisies ne survivront pas à la fermeture de la page. Ouvre le lien directement dans ton navigateur pour que tout soit conservé.</div>
-  <section style="display:flex;flex-direction:column;gap:14px">
+  <section style="display:flex;flex-direction:column;gap:14px;border-top:.5px solid var(--stroke);padding-top:24px">
     <div class="mantra">Une journée raconte une vie.</div>
     <div class="timeline" id="timeline"></div>
   </section>
