@@ -34,7 +34,7 @@ body{
 .view{
   animation:fadein .55s cubic-bezier(.2,.7,.2,1) both;
   max-width:460px;margin:0 auto;display:flex;flex-direction:column;gap:34px;
-  padding:max(26px,env(safe-area-inset-top)) 22px calc(104px + env(safe-area-inset-bottom));
+  padding:max(26px,env(safe-area-inset-top)) 22px calc(152px + env(safe-area-inset-bottom));
   min-height:100%;
 }
 @keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
@@ -66,8 +66,10 @@ h2{font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:var(--fain
 .popover{
   position:absolute;right:0;top:40px;z-index:40;min-width:220px;
   padding:8px;display:flex;flex-direction:column;gap:2px;
-  background:rgba(28,28,32,.78);
-  box-shadow:0 18px 50px rgba(0,0,0,.5);
+  background:rgba(18,18,21,.98);
+  border:.5px solid var(--stroke2);
+  backdrop-filter:blur(24px) saturate(140%);-webkit-backdrop-filter:blur(24px) saturate(140%);
+  box-shadow:0 18px 50px rgba(0,0,0,.55);
 }
 .popover button{
   font-family:inherit;font-size:14px;color:var(--ink);background:none;border:none;
@@ -149,13 +151,6 @@ h2{font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:var(--fain
   50%{box-shadow:0 0 22px var(--g)}
 }
 .bubble:active{transform:scale(.97)}
-.sheet-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-.mic{
-  background:none;border:none;color:var(--faint);cursor:pointer;padding:4px;flex-shrink:0;
-}
-.mic svg{width:18px;height:18px;display:block}
-.mic:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:8px}
-.micnote{font-size:11.5px;color:var(--faint);text-align:right;min-height:14px}
 .catrow{display:grid;grid-template-columns:1fr 1fr;gap:9px}
 .cat{
   display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:16px;
@@ -210,6 +205,13 @@ input[type=range]::-moz-range-thumb{
 .stepper span{min-width:52px;text-align:center;font-size:16px;font-weight:300;font-variant-numeric:tabular-nums}
 
 /* Parcours */
+.monthrow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.navbtn{
+  background:none;border:none;color:var(--muted);font-size:19px;line-height:1;
+  font-family:inherit;cursor:pointer;padding:8px 14px;border-radius:12px;
+}
+.navbtn:active,.navbtn:focus-visible{background:var(--glass2);outline:none}
+.navbtn:disabled{opacity:.22;cursor:default}
 .month{font-size:24px;font-weight:300;letter-spacing:-.01em}
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
 .cal .wd{font-size:9.5px;color:var(--faint);text-align:center;text-transform:uppercase;letter-spacing:.1em;padding-bottom:6px}
@@ -295,7 +297,11 @@ nav button.on .i{opacity:1;filter:drop-shadow(0 0 7px rgba(255,255,255,.55))}
 
 <!-- PARCOURS -->
 <div class="view" id="view-me" hidden>
-  <div class="month" id="monthName"></div>
+  <div class="monthrow">
+    <button class="navbtn" id="prevMonth" aria-label="Mois précédent">‹</button>
+    <div class="month" id="monthName"></div>
+    <button class="navbtn" id="nextMonth" aria-label="Mois suivant">›</button>
+  </div>
   <div class="cal" id="cal"></div>
   <p class="insight" id="insight" hidden></p>
   <div class="daydetail" id="daydetail" hidden>
@@ -318,6 +324,7 @@ nav button.on .i{opacity:1;filter:drop-shadow(0 0 7px rgba(255,255,255,.55))}
       <label for="intention">Dans 5 ans, je veux être…</label>
       <textarea id="intention" rows="3" placeholder="Écris ta phrase d’intention"></textarea>
     </div>
+    <div class="chips" id="intentSuggest"></div>
   </div>
   <div style="display:flex;flex-direction:column;gap:14px">
     <h2>Rappels</h2>
@@ -329,6 +336,7 @@ nav button.on .i{opacity:1;filter:drop-shadow(0 0 7px rgba(255,255,255,.55))}
       <div class="field"><label>De</label><div class="stepper" data-s="start"><button type="button" aria-label="Plus tôt">−</button><span></span><button type="button" aria-label="Plus tard">+</button></div></div>
       <div class="field"><label>Jusqu’à</label><div class="stepper" data-s="end"><button type="button" aria-label="Plus tôt">−</button><span></span><button type="button" aria-label="Plus tard">+</button></div></div>
     </div>
+    <p class="hint">Le matin, un seul rappel t’invite à commencer ta journée. Dès ton premier check-in, les suivants arrivent selon l’intervalle choisi, décomptés depuis ce premier check-in.</p>
     <button class="ghost" id="notifBtn">Activer les notifications</button>
     <button class="ghost" id="notifTest">Envoyer une notification de test</button>
     <p class="hint" id="notifHint">Les rappels se déclenchent quand cette page est ouverte (onglet ou icône sur l’écran d’accueil). Une page web ne peut pas réveiller un téléphone fermé : pour un rappel qui sonne même écran verrouillé, ajoute en plus une alarme répétée dans l’app Horloge, à la même fréquence.</p>
@@ -351,18 +359,15 @@ nav button.on .i{opacity:1;filter:drop-shadow(0 0 7px rgba(255,255,255,.55))}
 <div class="overlay" id="overlay"></div>
 <div class="sheet" id="sheet" role="dialog" aria-label="Check-in">
   <div class="grip"></div>
-  <div class="sheet-head">
-    <p id="sheetQ">Cette dernière heure&nbsp;?</p>
-    <button class="mic" id="micBtn" aria-label="Note vocale (bientôt)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></button>
-  </div>
+  <p id="sheetQ">Cette dernière heure&nbsp;?</p>
   <div class="predict" id="predict" hidden></div>
+  <input type="text" id="act" placeholder="Préciser l’activité (optionnel)" autocomplete="off">
   <div class="catrow">
     <button class="cat" data-c="🌱"><span class="e">🌱</span>Investie</button>
     <button class="cat" data-c="❤️"><span class="e">❤️</span>Importante</button>
     <button class="cat" data-c="😌"><span class="e">😌</span>Repos choisi</button>
     <button class="cat" data-c="🤷"><span class="e">🤷</span>Temps subi</button>
   </div>
-  <div class="micnote" id="micNote"></div>
 </div>
 
 <button class="checkin-btn" id="openSheet" aria-label="Check-in">+</button>
@@ -418,7 +423,7 @@ function show(tab){
   });
   document.getElementById('openSheet').hidden = tab!=='today';
   if(tab==='today') renderToday();
-  if(tab==='me'){ document.getElementById('daydetail').hidden=true; document.getElementById('cal').hidden=false; renderMe(); }
+  if(tab==='me'){ document.getElementById('daydetail').hidden=true; document.getElementById('cal').hidden=false; monthOffset=0; renderMe(); }
 }
 ['today','me','settings'].forEach(t=>document.getElementById('tab-'+t).addEventListener('click',()=>show(t)));
 
@@ -433,8 +438,9 @@ function sheetTitle(){
 }
 function logEntry(cat,act){
   const now=new Date();
-  day(todayKey()).entries.push({t:pad2(now.getHours())+'h'+pad2(now.getMinutes()),c:cat,a:(act||'').trim()});
-  lastReminder=Date.now();
+  const d=day(todayKey());
+  if(!d.entries.length) d.firstFillAt=now.getTime();
+  d.entries.push({t:pad2(now.getHours())+'h'+pad2(now.getMinutes()),c:cat,a:(act||'').trim()});
   save(data);
   closeSheet(); renderToday();
 }
@@ -475,9 +481,10 @@ function renderPredict(){
     el.appendChild(b);
   });
 }
+const actInput=document.getElementById('act');
 function openSheet(){
   document.getElementById('sheetQ').innerHTML=sheetTitle();
-  document.getElementById('micNote').textContent='';
+  actInput.value='';
   predList=predictions();
   selAct=predList.length?predList[0].a:null;
   renderPredict();
@@ -486,17 +493,18 @@ function openSheet(){
 function closeSheet(){sheet.classList.remove('open');overlay.classList.remove('open');}
 document.getElementById('openSheet').addEventListener('click',openSheet);
 overlay.addEventListener('click',closeSheet);
-document.querySelectorAll('.cat').forEach(btn=>btn.addEventListener('click',()=>{
-  logEntry(btn.dataset.c,selAct||'');
-}));
-document.getElementById('micBtn').addEventListener('click',()=>{
-  document.getElementById('micNote').textContent='Notes vocales — bientôt.';
+/* Le texte tapé prend le pas sur la bulle prédite — la prédiction reste
+   le chemin rapide par défaut, la saisie manuelle reste toujours possible. */
+actInput.addEventListener('input',()=>{
+  if(actInput.value.trim()){ selAct=null; renderPredict(); }
 });
+document.querySelectorAll('.cat').forEach(btn=>btn.addEventListener('click',()=>{
+  logEntry(btn.dataset.c,actInput.value.trim()||selAct||'');
+}));
 
 /* ---------- rappels ---------- */
 /* Une page web ne tourne pas téléphone fermé : le moteur agit quand la page
    est ouverte (notification système si autorisée, sinon ouverture du sheet). */
-let lastReminder=Date.now();
 const pausePop=document.getElementById('pausePop');
 function renderPauseChip(){
   const chip=document.getElementById('pauseChip');
@@ -550,17 +558,22 @@ function showNotif(body){
     return true;
   }catch(e){return false;}
 }
-function fireReminder(){
-  /* Page visible : la question s'ouvre directement, pas de notification. */
+/* Page visible : la question s'ouvre directement, pas de notification. */
+function notifyOrOpen(body){
   if(document.visibilityState==='visible'){
     try{navigator.vibrate&&navigator.vibrate(80);}catch(e){}
     if(!sheet.classList.contains('open')){show('today');openSheet();}
     return;
   }
-  const shown=showNotif(sheetTitle());
+  const shown=showNotif(body);
   try{navigator.vibrate&&navigator.vibrate([200,100,200]);}catch(e){}
   if(!shown&&!sheet.classList.contains('open')){show('today');openSheet();}
 }
+/* Avant le premier check-in du jour : un seul rappel, au démarrage de la
+   plage horaire, pour inviter à commencer. Après : rappels espacés de
+   l'intervalle choisi, décomptés depuis ce premier check-in (pas depuis
+   l'heure d'ouverture de la page) — état persisté pour survivre aux
+   rechargements dus à la mise en veille du téléphone. */
 function checkReminder(){
   const s=data.settings, now=Date.now(), h=new Date().getHours();
   if(s.pauseUntil){
@@ -568,9 +581,22 @@ function checkReminder(){
     s.pauseUntil=0;save(data);renderPauseChip();
   }
   if(h<s.start||h>=s.end) return;
-  if(now-lastReminder < s.interval*60000) return;
-  lastReminder=now;
-  fireReminder();
+  const d=day(todayKey());
+  if(!d.entries.length){
+    if(data.morningPromptDate!==todayKey()){
+      data.morningPromptDate=todayKey();save(data);
+      notifyOrOpen('Une nouvelle journée commence — note ta première heure.');
+    }
+    return;
+  }
+  if(!d.firstFillAt) return;
+  const iv=s.interval*60000;
+  const elapsed=now-d.firstFillAt;
+  if(elapsed<iv) return;
+  const slot=Math.floor(elapsed/iv);
+  if((d.lastSlotFired||0)>=slot) return;
+  d.lastSlotFired=slot; save(data);
+  notifyOrOpen(sheetTitle());
 }
 setInterval(checkReminder,30000);
 /* Android gèle les minuteurs écran éteint : rattrapage dès le retour sur la
@@ -680,17 +706,20 @@ function lum(k){
   const b=(data.days[k]||{}).bilan||{};
   return (b.b1===undefined||b.b1==='')?null:+b.b1;
 }
+let monthOffset=0;
 function renderMe(){
   const now=new Date();
-  document.getElementById('monthName').textContent=new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric'}).format(now);
+  const view=new Date(now.getFullYear(),now.getMonth()+monthOffset,1);
+  document.getElementById('monthName').textContent=new Intl.DateTimeFormat('fr-FR',{month:'long',year:'numeric'}).format(view);
+  document.getElementById('nextMonth').disabled=monthOffset>=0;
   const cal=document.getElementById('cal');cal.innerHTML='';
   ['L','M','M','J','V','S','D'].forEach(w=>{const d=document.createElement('div');d.className='wd';d.textContent=w;cal.appendChild(d);});
-  const first=new Date(now.getFullYear(),now.getMonth(),1);
+  const first=new Date(view.getFullYear(),view.getMonth(),1);
   const pad=(first.getDay()+6)%7;
   for(let i=0;i<pad;i++) cal.appendChild(document.createElement('div'));
-  const nDays=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  const nDays=new Date(view.getFullYear(),view.getMonth()+1,0).getDate();
   for(let d=1;d<=nDays;d++){
-    const dt=new Date(now.getFullYear(),now.getMonth(),d,12);
+    const dt=new Date(view.getFullYear(),view.getMonth(),d,12);
     const k=dkey(dt);
     const cell=document.createElement('button');cell.className='cell';cell.textContent=d;
     if(k===todayKey()) cell.classList.add('today');
@@ -715,14 +744,17 @@ function renderMe(){
     cal.appendChild(cell);
   }
   const insEl=document.getElementById('insight');
-  const ins=monthInsight();
+  const ins=monthInsight(view);
   insEl.hidden=!ins;
   if(ins) insEl.textContent=ins;
 }
+document.getElementById('prevMonth').addEventListener('click',()=>{monthOffset--;renderMe();});
+document.getElementById('nextMonth').addEventListener('click',()=>{if(monthOffset<0){monthOffset++;renderMe();}});
 /* Une lecture de long terme, en une phrase discrète — jamais un chiffre brut. */
-function monthInsight(){
+function monthInsight(view){
   const now=new Date();
-  const mk=now.getFullYear()+'-'+pad2(now.getMonth()+1);
+  const px = (view.getFullYear()===now.getFullYear()&&view.getMonth()===now.getMonth()) ? 'Ce mois-ci' : 'Ce mois-là';
+  const mk=view.getFullYear()+'-'+pad2(view.getMonth()+1);
   const days=Object.entries(data.days).filter(([k])=>k.startsWith(mk));
   const aligned=[],others=[];
   days.forEach(([k,d])=>{
@@ -734,18 +766,18 @@ function monthInsight(){
   });
   if(aligned.length>=2){
     if(aligned.filter(h=>h<9).length/aligned.length>=0.7)
-      return 'Ce mois-ci, tes journées les plus alignées commencent avant 9h.';
+      return `${px}, tes journées les plus alignées commencent avant 9h.`;
     if(others.length>=2){
       const avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
       if(avg(aligned)<avg(others)-1)
-        return 'Ce mois-ci, tes journées les plus alignées commencent plus tôt que les autres.';
+        return `${px}, tes journées les plus alignées commencent plus tôt que les autres.`;
     }
   }
   const c={};let n=0;
   days.forEach(([k,d])=>(d.entries||[]).forEach(e=>{c[e.c]=(c[e.c]||0)+1;n++;}));
   if(n>=10){
     const [top,cnt]=Object.entries(c).sort((a,b)=>b[1]-a[1])[0];
-    if(cnt/n>=0.5) return `Ce mois-ci, la plupart de tes heures notées sont «&nbsp;${LB[top].toLowerCase()}&nbsp;»`.replace(/&nbsp;/g,' ')+'.';
+    if(cnt/n>=0.5) return `${px}, la plupart de tes heures notées sont «&nbsp;${LB[top].toLowerCase()}&nbsp;»`.replace(/&nbsp;/g,' ')+'.';
   }
   return '';
 }
@@ -775,6 +807,25 @@ document.getElementById('backCal').addEventListener('click',()=>{
 const intention=document.getElementById('intention');
 intention.value=data.intention;
 intention.addEventListener('input',()=>{data.intention=intention.value;save(data);});
+
+const INTENTS=[
+  'Quelqu’un qui tient ses engagements envers lui-même.',
+  'Quelqu’un de posé, qui choisit plutôt qu’il ne subit.',
+  'Quelqu’un que ses proches peuvent citer en exemple.',
+  'Quelqu’un qui finit ce qu’il commence.',
+  'Quelqu’un qui n’a pas négligé son corps.',
+  'Quelqu’un qui a construit ce qui compte vraiment pour lui.'
+];
+(function(){
+  const el=document.getElementById('intentSuggest');
+  INTENTS.forEach(s=>{
+    const b=document.createElement('button');b.type='button';b.className='mini';
+    b.textContent=s.length>26?s.slice(0,25)+'…':s;
+    b.title=s;
+    b.onclick=()=>{intention.value=s;data.intention=s;save(data);};
+    el.appendChild(b);
+  });
+})();
 
 const INTERVALS=[[30,'30 min'],[60,'1 h'],[90,'1 h 30'],[120,'2 h'],[180,'3 h']];
 function renderIntervalChips(){
