@@ -340,6 +340,14 @@ nav button.on .i{opacity:1;filter:drop-shadow(0 0 7px rgba(255,255,255,.55))}
     <p class="hint" id="notifHint">Les rappels se déclenchent quand cette page est ouverte (onglet ou icône sur l’écran d’accueil). Une page web ne peut pas réveiller un téléphone fermé : pour un rappel qui sonne même écran verrouillé, ajoute en plus une alarme répétée dans l’app Horloge, à la même fréquence.</p>
   </div>
   <div style="display:flex;flex-direction:column;gap:14px">
+    <h2>Notifications à distance</h2>
+    <p class="hint">Un petit serveur (que tu héberges toi-même, gratuitement) envoie la notification même appli fermée, écran éteint. Il ne connaît que l’heure à laquelle te notifier — jamais tes activités, bilans ou intentions.</p>
+    <div class="field"><label for="pushUrl">Adresse du relais</label><input type="text" id="pushUrl" placeholder="https://devenir-push.tonnom.workers.dev" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+    <button class="ghost" id="pushEnable">Activer les notifications à distance</button>
+    <button class="ghost" id="pushTest">Tester le push distant</button>
+    <p class="hint" id="pushHint"></p>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:14px">
     <h2>Bilan du soir</h2>
     <div class="field"><label>Le bilan apparaît à partir de</label><div class="stepper" data-s="evening"><button type="button" aria-label="Plus tôt">−</button><span></span><button type="button" aria-label="Plus tard">+</button></div></div>
     <p class="hint">Chaque soir, une question de réflexion différente — tu peux en changer d’un appui si elle ne t’inspire pas.</p>
@@ -390,10 +398,23 @@ try{
   store={getItem:k=>(k in mem?mem[k]:null),setItem:(k,v)=>{mem[k]=String(v);},removeItem:k=>{delete mem[k];}};
 }
 const DEFS={interval:60,start:9,end:22,evening:19,pauseUntil:0};
+/* Clé publique VAPID — sans danger à embarquer, elle ne fait qu'identifier
+   ce relais aux services de push ; seule la clé privée (côté serveur) est
+   secrète. Voir worker/DEPLOY.md pour déployer son propre relais gratuit. */
+const VAPID_PUBLIC='BKAXvi8hzyamgi3-v-8bl94qXG2-EfrgUSmhpvKuPNyxYGg49Ty1NrKTlG0ZWl-aGSD_o9CIsW3Xyna0t9ar_pg';
+function urlBase64ToUint8Array(base64String){
+  const padding='='.repeat((4-base64String.length%4)%4);
+  const base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(base64);
+  const out=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) out[i]=raw.charCodeAt(i);
+  return out;
+}
 const load=()=>{
   let d;
   try{d=JSON.parse(store.getItem(K)||'{"intention":"","days":{}}');}catch(e){d={intention:'',days:{}};}
   d.settings=Object.assign({},DEFS,d.settings||{});
+  d.push=Object.assign({url:'',id:'',active:false},d.push||{});
   return d;
 };
 const save=d=>{ try{store.setItem(K,JSON.stringify(d));}catch(e){} };
@@ -439,7 +460,7 @@ function logEntry(cat,act){
   const d=day(todayKey());
   if(!d.entries.length) d.firstFillAt=now.getTime();
   d.entries.push({t:pad2(now.getHours())+'h'+pad2(now.getMinutes()),c:cat,a:(act||'').trim()});
-  save(data);
+  save(data); syncPush();
   closeSheet(); renderToday();
 }
 /* Suggestions locales : ce que tu fais d'habitude à cette heure-là.
@@ -516,7 +537,7 @@ function renderPauseChip(){
 function renderPausePop(){
   pausePop.innerHTML='<div class="pophead">Rappels</div>';
   const s=data.settings;
-  const mk=(label,fn)=>{const b=document.createElement('button');b.textContent=label;b.onclick=()=>{fn();save(data);renderPauseChip();pausePop.hidden=true;};pausePop.appendChild(b);};
+  const mk=(label,fn)=>{const b=document.createElement('button');b.textContent=label;b.onclick=()=>{fn();save(data);syncPush();renderPauseChip();pausePop.hidden=true;};pausePop.appendChild(b);};
   if(s.pauseUntil&&Date.now()<s.pauseUntil){
     mk('Réactiver les rappels',()=>{s.pauseUntil=0;});
   }
@@ -544,6 +565,30 @@ if('serviceWorker' in navigator){
       if(e.data&&e.data.open==='checkin'){show('today');openSheet();}
     });
   }catch(e){}
+}
+/* ---------- relais distant (push réel, appli fermée) ---------- */
+function deviceId(){
+  if(!data.push.id){
+    data.push.id = (crypto.randomUUID ? crypto.randomUUID() : 'd-'+Date.now()+'-'+Math.random().toString(36).slice(2));
+    save(data);
+  }
+  return data.push.id;
+}
+/* Envoie au relais de quoi décider QUAND notifier — jamais le contenu.
+   No-op silencieux si aucune adresse n'est configurée. */
+function syncPush(){
+  const url=(data.push.url||'').trim().replace(/\/$/,'');
+  if(!url||!data.push.active) return;
+  const d=day(todayKey());
+  const payload={
+    id: deviceId(),
+    tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    settings: data.settings,
+    pauseUntil: data.settings.pauseUntil||0,
+    day:{key:todayKey(), hasEntry:d.entries.length>0, firstFillAt:d.firstFillAt||0, lastSlotFired:d.lastSlotFired||0},
+    morningPromptDate: data.morningPromptDate||''
+  };
+  fetch(url+'/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}).catch(()=>{});
 }
 function showNotif(body){
   if(!notifGranted())return false;
@@ -582,7 +627,7 @@ function checkReminder(){
   const d=day(todayKey());
   if(!d.entries.length){
     if(data.morningPromptDate!==todayKey()){
-      data.morningPromptDate=todayKey();save(data);
+      data.morningPromptDate=todayKey();save(data);syncPush();
       notifyOrOpen('Une nouvelle journée commence — note ta première heure.');
     }
     return;
@@ -593,7 +638,7 @@ function checkReminder(){
   if(elapsed<iv) return;
   const slot=Math.floor(elapsed/iv);
   if((d.lastSlotFired||0)>=slot) return;
-  d.lastSlotFired=slot; save(data);
+  d.lastSlotFired=slot; save(data);syncPush();
   notifyOrOpen(sheetTitle());
 }
 setInterval(checkReminder,30000);
@@ -633,7 +678,7 @@ function entryRow(e,deletable,es,i){
   const row=document.createElement('div');row.className='entry';
   row.innerHTML=`<time>${e.t}</time><span class="dot" style="background:${CB[e.c]};box-shadow:0 0 12px ${CB[e.c]}"></span><span class="act">${e.a?esc(e.a):'<span class="cat-lb">'+LB[e.c]+'</span>'}</span>`;
   if(deletable){
-    attachSwipe(row,()=>{es.splice(i,1);save(data);renderToday();});
+    attachSwipe(row,()=>{es.splice(i,1);save(data);syncPush();renderToday();});
   }
   return row;
 }
@@ -831,7 +876,7 @@ function renderIntervalChips(){
   INTERVALS.forEach(([v,lbl])=>{
     const b=document.createElement('button');b.type='button';
     b.className='mini'+(data.settings.interval===v?' on':'');b.textContent=lbl;
-    b.onclick=()=>{data.settings.interval=v;save(data);renderIntervalChips();};
+    b.onclick=()=>{data.settings.interval=v;save(data);syncPush();renderIntervalChips();};
     el.appendChild(b);
   });
 }
@@ -845,7 +890,7 @@ document.querySelectorAll('.stepper').forEach(st=>{
   const key=st.dataset.s,btns=st.querySelectorAll('button');
   const bump=d=>{
     data.settings[key]=Math.min(STEP[key].max,Math.max(STEP[key].min,data.settings[key]+d));
-    save(data);renderSteppers();
+    save(data);syncPush();renderSteppers();
     if(key==='evening')renderToday();
   };
   btns[0].onclick=()=>bump(-1);
@@ -884,6 +929,59 @@ document.getElementById('notifTest').addEventListener('click',()=>{
 });
 refreshNotifUI();
 
+/* ---------- notifications à distance ---------- */
+const pushUrlInput=document.getElementById('pushUrl'),pushHint=document.getElementById('pushHint');
+pushUrlInput.value=data.push.url||'';
+pushUrlInput.addEventListener('input',()=>{ data.push.url=pushUrlInput.value; save(data); });
+async function pushSubscribe(){
+  const url=(pushUrlInput.value||'').trim().replace(/\/$/,'');
+  if(!url){ pushHint.textContent='Colle d’abord l’adresse de ton relais (voir worker/DEPLOY.md).'; return; }
+  data.push.url=url; save(data);
+  if(typeof Notification==='undefined'){ pushHint.textContent='Les notifications ne sont pas disponibles dans ce navigateur.'; return; }
+  if(Notification.permission==='default'){
+    const perm=await Notification.requestPermission().catch(()=>'denied');
+    if(perm!=='granted'){ pushHint.textContent='Notifications refusées.'; return; }
+  }else if(Notification.permission==='denied'){
+    pushHint.textContent='Notifications refusées par le navigateur — autorise-les d’abord (icône à gauche de l’adresse).';
+    return;
+  }
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)){
+    pushHint.textContent='Ce navigateur ne supporte pas les notifications push.';
+    return;
+  }
+  try{
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub) sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC)});
+    const d=day(todayKey());
+    const payload={
+      id:deviceId(), subscription:sub.toJSON(),
+      tz:Intl.DateTimeFormat().resolvedOptions().timeZone,
+      settings:data.settings, pauseUntil:data.settings.pauseUntil||0,
+      day:{key:todayKey(),hasEntry:d.entries.length>0,firstFillAt:d.firstFillAt||0,lastSlotFired:d.lastSlotFired||0},
+      morningPromptDate:data.morningPromptDate||''
+    };
+    const res=await fetch(url+'/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(res.ok){
+      data.push.active=true; save(data);
+      pushHint.textContent='Activé ✓ — les rappels arriveront même appli fermée, écran éteint.';
+    }else{
+      pushHint.textContent='Le relais n’a pas répondu correctement — vérifie l’adresse et le déploiement (worker/DEPLOY.md).';
+    }
+  }catch(e){
+    pushHint.textContent='Échec de l’abonnement : '+(e&&e.message?e.message:'erreur inconnue');
+  }
+}
+document.getElementById('pushEnable').addEventListener('click',pushSubscribe);
+document.getElementById('pushTest').addEventListener('click',async()=>{
+  const url=(pushUrlInput.value||'').trim().replace(/\/$/,'');
+  if(!url||!data.push.active){ pushHint.textContent='Active d’abord les notifications à distance ci-dessus.'; return; }
+  try{
+    const res=await fetch(url+'/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:deviceId()})});
+    pushHint.textContent = res.ok ? 'Test envoyé ✓ — regarde ton téléphone dans quelques secondes.' : 'Échec du test (abonnement introuvable ou expiré) — réactive les notifications ci-dessus.';
+  }catch(e){ pushHint.textContent='Impossible de joindre le relais — vérifie l’adresse.'; }
+});
+
 function buildExport(){
   let out='DEVENIR — export du test\nIntention : '+data.intention+'\n\n';
   Object.keys(data.days).sort().forEach(k=>{
@@ -918,8 +1016,12 @@ let resetArmed=null;
 resetBtn.addEventListener('click',()=>{
   if(resetArmed){
     clearTimeout(resetArmed);resetArmed=null;
+    if(data.push.url&&data.push.active){
+      fetch(data.push.url.replace(/\/$/,'')+'/unsubscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:deviceId()})}).catch(()=>{});
+    }
     try{store.removeItem(K);}catch(e){}
     data=load();intention.value='';
+    pushUrlInput.value='';pushHint.textContent='';
     renderIntervalChips();renderSteppers();
     resetBtn.textContent='Effacer toutes les données';
     renderPauseChip();

@@ -1,0 +1,10 @@
+name = "devenir-push"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+[triggers]
+crons = ["* * * * *"]
+
+[[kv_namespaces]]
+binding = "DEVENIR_KV"
+id = "REMPLACE_PAR_L_ID_DU_NAMESPACE_KV"
